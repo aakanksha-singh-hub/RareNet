@@ -19,7 +19,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from app.services.cyborg_service import cyborg_service
+from app.services.cyborg_service import cyborg_service, INSTITUTIONS
 from app.rare_diseases import RARE_DISEASES
 
 # Configure logging
@@ -36,7 +36,8 @@ class AggregationContext:
     unique_matches: int = 0
     privacy_threshold: int = 5
     threshold_passed: bool = False
-    noise_epsilon: float = 0.1
+    noise_epsilon_target: float = 0.1
+    noise_epsilon_effective: float = 2.0
     diagnoses_found: Dict[str, int] = None
     
     def __post_init__(self):
@@ -55,22 +56,16 @@ class PrivacyAggregator:
     3. Differential Privacy: Laplace noise added to confidence scores
     """
     
-    PRIVACY_THRESHOLD = 5  # Minimum cohort size for K-anonymity
-    EPSILON = 0.1  # Differential privacy parameter (lower = more privacy, more noise)
+    PRIVACY_THRESHOLD = 5  # Minimum cohort size (minimum query-set-size rule, not textbook k-anonymity)
+    EPSILON_TARGET = 0.1  # Label used in docs; aspirational privacy budget
+    NOISE_UTILITY_SCALE = 0.05  # Scales Laplace noise down for usable confidence scores
+    # Effective epsilon = EPSILON_TARGET / NOISE_UTILITY_SCALE (≈ 2.0 with defaults)
+    EPSILON = EPSILON_TARGET  # Back-compat alias for API fields named "epsilon"
     TOP_K_PER_NODE = 20  # How many results to fetch from each hospital
-    
+
     def __init__(self):
         self.cyborg = cyborg_service
-        self.institutions = [
-            "mumbai",      # Asia - Mumbai General Hospital
-            "boston",      # Americas - Boston Children's Hospital
-            "london",      # Europe - London University College Hospital
-            "tokyo",       # Asia - Tokyo Hospital
-            "singapore",   # Asia - Singapore Hospital
-            "toronto",     # Americas - Toronto Hospital
-            "sao_paulo",   # Americas - São Paulo Hospital
-            "berlin"       # Europe - Berlin Hospital
-        ]
+        self.institutions = INSTITUTIONS
         # Privacy metrics tracking
         self.queries_blocked_today = 0
         self.noise_added_count = 0
@@ -89,7 +84,8 @@ class PrivacyAggregator:
         context = AggregationContext(
             institutions_queried=len(self.institutions),
             privacy_threshold=self.PRIVACY_THRESHOLD,
-            noise_epsilon=self.EPSILON
+            noise_epsilon_target=self.EPSILON_TARGET,
+            noise_epsilon_effective=self.effective_epsilon,
         )
         
         all_matches = []
@@ -243,38 +239,44 @@ class PrivacyAggregator:
             "total_votes": sum(diagnosis_counts.values())
         }
     
-    def add_differential_privacy(self, score: float, epsilon: float = None) -> float:
+    @property
+    def effective_epsilon(self) -> float:
+        """Privacy budget after utility scaling (lower = more noise)."""
+        return round(self.EPSILON_TARGET / self.NOISE_UTILITY_SCALE, 2)
+
+    def add_differential_privacy(self, score: float, epsilon_target: float = None) -> float:
         """
-        Add Laplace noise to the confidence score for differential privacy.
-        
-        This prevents attackers from mathematically reverse-engineering
-        the exact number of matching patients from the confidence score.
-        
+        Add Laplace noise to the confidence score.
+
+        Uses EPSILON_TARGET in the scale formula but applies NOISE_UTILITY_SCALE
+        so noise does not swamp scores in [0, 1]. The effective privacy budget is
+        EPSILON_TARGET / NOISE_UTILITY_SCALE (≈ 2.0 with defaults), not 0.1.
+
+        Note: No privacy budget is tracked across repeated queries in the live path.
+
         Args:
             score: Raw confidence score (0.0 to 1.0)
-            epsilon: Privacy parameter (lower = more noise, more privacy)
-            
+            epsilon_target: Overrides EPSILON_TARGET for this call
+
         Returns:
             Noisy confidence score, clamped to [0.0, 1.0]
         """
-        if epsilon is None:
-            epsilon = self.EPSILON
-        
-        # Laplace noise with scale = sensitivity / epsilon
-        # Sensitivity for a score in [0,1] is at most 1
-        scale = 1.0 / epsilon
-        noise = np.random.laplace(0, scale * 0.02)  # Reduced scaling for better utility
-        
-        # Add noise and clamp to valid range
-        noisy_score = score + noise
-        # Ensure at least 1% confidence if the result is valid
-        noisy_score = max(0.01, min(1.0, noisy_score))
-        
+        if epsilon_target is None:
+            epsilon_target = self.EPSILON_TARGET
+
+        scale = 1.0 / epsilon_target
+        noise = np.random.laplace(0, scale * self.NOISE_UTILITY_SCALE)
+
+        noisy_score = max(0.0, min(1.0, score + noise))
+
         # Track metrics
         self.noise_added_count += 1
-        
-        logger.info(f"[DP] Raw: {score:.3f} -> Noisy: {noisy_score:.3f} (epsilon={epsilon})")
-        
+
+        logger.info(
+            f"[DP] Raw: {score:.3f} -> Noisy: {noisy_score:.3f} "
+            f"(target ε={epsilon_target}, effective ε≈{self.effective_epsilon})"
+        )
+
         return round(noisy_score, 2)
     
     def get_disease_info(self, diagnosis: str) -> Dict[str, Any]:
@@ -335,7 +337,10 @@ class PrivacyAggregator:
                 "raw_matches_found": 0,
                 "privacy_threshold": context.privacy_threshold,
                 "threshold_passed": False,
-                "noise_epsilon": context.noise_epsilon,
+                "noise_epsilon": context.noise_epsilon_effective,
+                "noise_epsilon_target": context.noise_epsilon_target,
+                "noise_epsilon_effective": context.noise_epsilon_effective,
+                "vectors_scanned_note": "estimate (institutions × top_k per node)",
                 "data_returned": "NO_MATCHES"
             }
             insight = {
@@ -369,7 +374,10 @@ class PrivacyAggregator:
             "raw_matches_found": context.raw_matches_found,
             "privacy_threshold": context.privacy_threshold,
             "threshold_passed": top_diagnosis_count >= self.PRIVACY_THRESHOLD,
-            "noise_epsilon": context.noise_epsilon,
+            "noise_epsilon": context.noise_epsilon_effective,
+            "noise_epsilon_target": context.noise_epsilon_target,
+            "noise_epsilon_effective": context.noise_epsilon_effective,
+            "vectors_scanned_note": "estimate (institutions × top_k per node)",
             "data_returned": "BLOCKED" if top_diagnosis_count < self.PRIVACY_THRESHOLD else "AGGREGATED_INSIGHT",
             "diagnosis_distribution": context.diagnoses_found
         }

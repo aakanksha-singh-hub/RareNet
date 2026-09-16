@@ -1,0 +1,35 @@
+# GitHub Actions workflow to keep free-tier services awake
+# Pings backend every 14 minutes to prevent cold starts
+#
+# To enable:
+# 1. Update the URLs below with your actual deployment URLs
+# 2. Uncomment the schedule trigger
+# 3. Commit and push
+
+name: Keep Services Alive
+
+on:
+  # Uncomment to enable scheduled pings
+  # schedule:
+  #   - cron: '*/14 * * * *'  # Every 14 minutes
+  
+  # Manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend Health
+        run: |
+          # Replace with your actual backend URL
+          curl -s -o /dev/null -w "%{http_code}" https://rare-net-backend.onrender.com/api/health || true
+        
+      - name: Ping Backend Stats
+        run: |
+          # This also warms up the database connections
+          curl -s -o /dev/null -w "%{http_code}" https://rare-net-backend.onrender.com/api/stats || true
+
+      - name: Log Success
+        run: echo "✅ Services pinged at $(date)"
+

@@ -49,6 +49,9 @@ interface AuditData {
   privacy_threshold: number;
   threshold_passed: boolean;
   noise_epsilon: number;
+  noise_epsilon_target?: number;
+  noise_epsilon_effective?: number;
+  vectors_scanned_note?: string;
   data_returned: string;
   diagnosis_distribution?: Record<string, number>;
 }
@@ -348,7 +351,7 @@ function SearchPage() {
       >
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">
           Search the Network
-        </h1>
+          </h1>
         <p className="text-slate-500 max-w-lg mx-auto mb-8">
           Enter symptoms to find matching diagnoses across encrypted hospital databases.
         </p>
@@ -372,7 +375,7 @@ function SearchPage() {
               <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-white border border-slate-200 shadow-sm">
                 <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
                 <span className="text-sm text-slate-600">{searchStep}</span>
-              </div>
+            </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -397,7 +400,7 @@ function SearchPage() {
                 query={currentQuery}
               />
             </div>
-
+            
             {audit && !isSearching && (
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
@@ -461,7 +464,7 @@ function SearchPage() {
                     </div>
                     <div className="text-xs text-slate-500 line-clamp-2">
                       {example.query}
-                    </div>
+                </div>
                   </button>
                 ))}
               </div>
@@ -518,7 +521,7 @@ function SearchPage() {
                 <div className="text-3xl font-bold text-emerald-600">100%</div>
                 <div className="text-sm text-slate-500">Privacy Protected</div>
               </motion.div>
-            </div>
+          </div>
 
             {/* Privacy Protection Visualizer */}
             {privacyMetrics && (
@@ -560,8 +563,8 @@ function SearchPage() {
                 <p className="text-slate-400 text-xs mt-3">
                   You will never see which hospital has matching cases or individual patient data.
                 </p>
-              </div>
-            </div>
+          </div>
+        </div>
           </motion.section>
         )}
       </AnimatePresence>

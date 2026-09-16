@@ -42,6 +42,7 @@ export function ContributorMode() {
   // Form state
   const [symptoms, setSymptoms] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
+  const [customDiagnosis, setCustomDiagnosis] = useState('');
   const [ageRange, setAgeRange] = useState<string>('19-40');
   const [sex, setSex] = useState<string>('M');
   const [notes, setNotes] = useState('');
@@ -100,6 +101,8 @@ export function ContributorMode() {
     setSuccess(null);
     setIsSubmitting(true);
 
+    const finalDiagnosis = diagnosis === 'Other' ? customDiagnosis : diagnosis;
+
     try {
       const response = await fetch(`${API_URL}/api/report`, {
         method: 'POST',
@@ -109,7 +112,7 @@ export function ContributorMode() {
         },
         body: JSON.stringify({
           symptoms,
-          diagnosis,
+          diagnosis: finalDiagnosis,
           patient_age_range: ageRange,
           patient_sex: sex,
           notes: notes || null
@@ -140,6 +143,7 @@ export function ContributorMode() {
       // Reset form
       setSymptoms('');
       setDiagnosis('');
+      setCustomDiagnosis('');
       setNotes('');
       
     } catch (err) {
@@ -222,7 +226,10 @@ export function ContributorMode() {
             </label>
             <select
               value={diagnosis}
-              onChange={(e) => setDiagnosis(e.target.value)}
+              onChange={(e) => {
+                setDiagnosis(e.target.value);
+                if (e.target.value !== 'Other') setCustomDiagnosis('');
+              }}
               className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-800 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all"
               required
             >
@@ -230,14 +237,45 @@ export function ContributorMode() {
               <option value="Unknown" className="text-amber-600 font-medium">
                 Unknown / Not Yet Diagnosed
               </option>
+              <option value="Other" className="text-sky-600 font-medium">
+                Other / Custom Diagnosis...
+              </option>
               <optgroup label="Confirmed Diagnoses">
                 {diseases.map((d) => (
                   <option key={d.name} value={d.name}>
-                    {d.name} ({d.icd10})
+                    {d.name.includes("Wilson Disease") ? "Wilson's Disease" : d.name} ({d.icd10})
                   </option>
                 ))}
               </optgroup>
             </select>
+
+            {/* Custom Diagnosis Input */}
+            <AnimatePresence>
+              {diagnosis === 'Other' && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mt-4"
+                >
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Custom Diagnosis Name
+                  </label>
+                  <input
+                    type="text"
+                    value={customDiagnosis}
+                    onChange={(e) => setCustomDiagnosis(e.target.value)}
+                    placeholder="Enter the disease name (e.g. Takayasu Arteritis)"
+                    className="w-full px-4 py-3 rounded-xl bg-white border border-sky-200 text-slate-800 placeholder-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-sky-500">
+                    This will be added to the network as a new diagnosis category.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {diagnosis === 'Unknown' && (
               <p className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
                 This case will be added to the network for symptom matching. 

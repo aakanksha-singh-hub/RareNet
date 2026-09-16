@@ -38,6 +38,9 @@ interface AuditData {
   privacy_threshold: number;
   threshold_passed: boolean;
   noise_epsilon: number;
+  noise_epsilon_target?: number;
+  noise_epsilon_effective?: number;
+  vectors_scanned_note?: string;
   data_returned: string;
 }
 
@@ -428,7 +431,10 @@ export const DiagnosticInsight = ({ insight, audit, searchTime, isLoading, query
             </div>
             <p className="text-xs text-slate-400 mt-2 flex items-center gap-1.5">
               <Lock className="w-3 h-3" />
-              Score includes differential privacy noise (ε={audit?.noise_epsilon || 0.1}) for protection
+              Score includes Laplace noise (effective ε≈{audit?.noise_epsilon_effective ?? audit?.noise_epsilon ?? 2})
+              {audit?.noise_epsilon_target != null && (
+                <span className="text-slate-400"> · target ε={audit.noise_epsilon_target}</span>
+              )}
             </p>
           </div>
 

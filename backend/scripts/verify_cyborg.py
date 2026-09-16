@@ -9,7 +9,10 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'))
 CYBORGDB_URL = os.getenv("CYBORGDB_URL", "http://localhost:8000")
 if not CYBORGDB_URL.startswith("http"):
     CYBORGDB_URL = f"http://{CYBORGDB_URL}"
-CYBORGDB_API_KEY = os.getenv("CYBORGDB_API_KEY", "rare-net-secret-key")
+CYBORGDB_API_KEY = os.getenv("CYBORGDB_API_KEY")
+if not CYBORGDB_API_KEY:
+    print("❌ CYBORGDB_API_KEY is not set. Add it to backend/.env")
+    sys.exit(1)
 
 def verify_connection():
     print(f"Attempting to connect to CyborgDB at {CYBORGDB_URL}...")

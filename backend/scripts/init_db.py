@@ -47,7 +47,7 @@ from app.rare_diseases import RARE_DISEASES
 
 # Initialize model
 print("Loading embedding model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
+model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
 print("Model loaded!")
 
 # Global Hospitals (8 nodes)
@@ -95,7 +95,7 @@ CASE_DISTRIBUTION = {
         "boston": 5, "toronto": 3, "sao_paulo": 3,
         "london": 4, "berlin": 2
     },
-    "Wilson's Disease": {
+    "Wilson Disease": {
         "mumbai": 3, "tokyo": 2, "singapore": 2,
         "boston": 4, "toronto": 3, "sao_paulo": 2,
         "london": 2, "berlin": 2

@@ -8,9 +8,14 @@ This is the main FastAPI application that implements:
 4. Network statistics and monitoring
 """
 
+import logging
 import os
 import time
 import uuid
+
+from dotenv import load_dotenv
+
+load_dotenv()
 from typing import List, Optional, Literal
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends, Request, Response
@@ -67,7 +72,7 @@ if env_origins:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all for hackathon/demo simplicity
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,10 +92,9 @@ def get_embedding_model():
     global model
     if model is None:
         print("🧠 get_embedding_model() called - Loading embedding model...")
-        model = SentenceTransformer('all-MiniLM-L6-v2')
+        model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
         print("✅ Embedding model loaded successfully")
     return model
-
 
 
 # ============================================
@@ -172,7 +176,8 @@ def health_check():
         "database": "connected",
         "model": "loaded",
         "privacy_threshold": privacy_aggregator.PRIVACY_THRESHOLD,
-        "epsilon": privacy_aggregator.EPSILON,
+        "epsilon_target": privacy_aggregator.EPSILON_TARGET,
+        "epsilon_effective": privacy_aggregator.effective_epsilon,
         "timestamp": datetime.utcnow().isoformat()
     }
 
@@ -248,7 +253,7 @@ def diagnose(
                 raw_matches_found=0,
                 privacy_threshold=privacy_aggregator.PRIVACY_THRESHOLD,
                 threshold_passed=False,
-                noise_epsilon=privacy_aggregator.EPSILON,
+                noise_epsilon=privacy_aggregator.effective_epsilon,
                 data_returned="INVALID_QUERY"
             )
             
@@ -267,9 +272,9 @@ def diagnose(
         query_vector = embedding_model.encode(request.symptoms).tolist()
         
         # Step 2: Run through privacy aggregator pipeline
-        # [ENCRYPTION NOTE]: The aggregator queries all 3 hospital CyborgDB nodes.
-        # CyborgDB performs similarity search on ENCRYPTED vectors - the vectors
-        # remain encrypted at rest and during search operations.
+        # [ENCRYPTION NOTE]: The aggregator queries all 8 hospital CyborgDB nodes.
+        # CyborgDB stores vectors encrypted at rest; the server fetches ciphertext
+        # via search tokens and decrypts only candidate results for re-ranking.
         insight_dict, audit_dict = privacy_aggregator.generate_diagnostic_insight(query_vector)
         
         # Step 3: Adjust confidence based on query validity
@@ -342,16 +347,25 @@ def report_case(
     if case.diagnosis.lower() == "unknown":
         matched_disease = "Unknown"
     else:
-        for disease in valid_diseases:
-            if case.diagnosis.lower() in disease.lower() or disease.lower() in case.diagnosis.lower():
-                matched_disease = disease
-                break
+        # Check for EXACT match first
+        if case.diagnosis in RARE_DISEASES:
+            matched_disease = case.diagnosis
+        else:
+            # Check for partial match
+            for disease in valid_diseases:
+                if case.diagnosis.lower() in disease.lower() or disease.lower() in case.diagnosis.lower():
+                    matched_disease = disease
+                    break
     
+    # If no match found, accept it as a custom diagnosis
     if not matched_disease:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown diagnosis: '{case.diagnosis}'. Must match a known rare disease or select 'Unknown'."
-        )
+        # Step 1.1: Basic validation for custom diagnosis
+        if not case.diagnosis or len(case.diagnosis.strip()) < 3:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid diagnosis name. Please provide a valid diagnosis or 'Unknown'."
+            )
+        matched_disease = case.diagnosis.strip()
     
     # Step 2: Validate symptoms contain medical terms
     validation = validate_symptoms(case.symptoms)
@@ -461,7 +475,8 @@ def get_network_stats(
         "symptoms_indexed": len(get_all_symptoms()),
         "privacy_config": {
             "k_anonymity_threshold": privacy_aggregator.PRIVACY_THRESHOLD,
-            "differential_privacy_epsilon": privacy_aggregator.EPSILON
+            "differential_privacy_epsilon_target": privacy_aggregator.EPSILON_TARGET,
+            "differential_privacy_epsilon_effective": privacy_aggregator.effective_epsilon,
         },
         "privacy_note": "Individual hospital case counts are hidden. Only aggregated network totals are shown."
     }
@@ -588,7 +603,7 @@ def get_hospital_cases(
     valid_hospitals = ["mumbai", "boston", "london", "tokyo", "singapore", "toronto", "sao_paulo", "berlin"]
     if hospital_id not in valid_hospitals:
         raise HTTPException(status_code=404, detail=f"Hospital '{hospital_id}' not found")
-    
+        
     # PRIVACY ENFORCEMENT: Only allow viewing own hospital
     is_own_hospital = current_user.hospital == hospital_id
     is_admin = current_user.role == "admin"
@@ -638,22 +653,24 @@ def get_privacy_config():
     """
     return {
         "k_anonymity_threshold": privacy_aggregator.PRIVACY_THRESHOLD,
-        "differential_privacy_epsilon": privacy_aggregator.EPSILON,
+        "differential_privacy_epsilon_target": privacy_aggregator.EPSILON_TARGET,
+        "differential_privacy_epsilon_effective": privacy_aggregator.effective_epsilon,
+        "noise_utility_scale": privacy_aggregator.NOISE_UTILITY_SCALE,
         "top_k_per_node": privacy_aggregator.TOP_K_PER_NODE,
         "metrics": privacy_aggregator.get_privacy_metrics(),
         "encryption": {
-            "at_rest": "CyborgDB encrypted vector storage",
+            "at_rest": "CyborgDB AES-256-GCM per record",
             "in_transit": "HTTPS/TLS",
-            "in_use": "CyborgDB encrypted similarity search"
+            "in_use": "Searchable symmetric encryption (SSE); candidates decrypted for re-ranking only"
         },
         "privacy_pipeline": [
             "1. [CLIENT] Symptoms entered as plaintext",
             "2. [SERVER] Vectorized using sentence-transformers (384 dims)",
-            "3. [CYBORG] Vector encrypted and stored in hospital-specific index",
-            "4. [CYBORG] Similarity search performed on ENCRYPTED vectors",
-            "5. [SERVER] K-anonymity check: require >= 5 matches",
-            "6. [SERVER] Aggregation: weighted voting on diagnoses",
-            "7. [SERVER] Differential privacy: Laplace noise added",
+            "3. [CYBORG] Vector encrypted and stored in hospital-specific index (per-hospital derived key)",
+            "4. [CYBORG] Client-derived search tokens fetch ciphertext; only candidates decrypted for re-ranking",
+            "5. [SERVER] Minimum cohort check: require >= 5 matches for top diagnosis",
+            "6. [SERVER] Aggregation: weighted voting on diagnoses (hospital names stripped)",
+            "7. [SERVER] Laplace noise on confidence (effective ε≈2 with current utility scaling)",
             "8. [CLIENT] Only diagnosis label + noisy confidence returned"
         ],
         "guarantees": [

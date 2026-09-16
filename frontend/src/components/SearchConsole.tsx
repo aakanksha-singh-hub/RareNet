@@ -200,11 +200,11 @@ export const SearchConsole = ({ onSearch, isSearching }: SearchConsoleProps) => 
             </div>
             
             {/* Input */}
-            <input
+          <input
               ref={inputRef}
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setTimeout(() => setIsFocused(false), 200)}
               placeholder="Describe symptoms: joint pain, fever, skin rash..."
@@ -232,7 +232,7 @@ export const SearchConsole = ({ onSearch, isSearching }: SearchConsoleProps) => 
 
             {/* Submit button */}
             <motion.button
-              type="submit"
+            type="submit"
               disabled={isSearching || !query.trim()}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -241,7 +241,7 @@ export const SearchConsole = ({ onSearch, isSearching }: SearchConsoleProps) => 
                   ? 'bg-gradient-to-r from-red-400 to-orange-400 hover:from-red-500 hover:to-orange-500 shadow-red-500/20'
                   : 'bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 shadow-sky-500/30'
               } disabled:opacity-40 disabled:cursor-not-allowed`}
-            >
+          >
               {isSearching ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />

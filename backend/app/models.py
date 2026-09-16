@@ -74,7 +74,10 @@ class PrivacyAuditLog(BaseModel):
     raw_matches_found: int
     privacy_threshold: int
     threshold_passed: bool
-    noise_epsilon: float
+    noise_epsilon: float  # Effective epsilon after utility scaling
+    noise_epsilon_target: Optional[float] = None
+    noise_epsilon_effective: Optional[float] = None
+    vectors_scanned_note: Optional[str] = None
     data_returned: str  # "AGGREGATED_INSIGHT" | "BLOCKED"
     diagnosis_distribution: Optional[Dict[str, int]] = None  # Only shown if passed
 

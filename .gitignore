@@ -1,34 +1,54 @@
 # Python
-backend/venv/
+__pycache__/
 backend/__pycache__/
 backend/**/__pycache__/
-backend/.env
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+backend/venv/
+backend/venv_test/
+backend/venv_test2/
+venv/
+.venv/
+env/
+
+# Environment & secrets (keep examples)
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
 
 # Node
+node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/dist-ssr/
 frontend/.next/
 frontend/out/
 frontend/build/
 
-# IDE
-.vscode/
+# OS & editors
+.DS_Store
+Thumbs.db
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
 
-# OS
-.DS_Store
-Thumbs.db
-
 # Logs
 *.log
 backend/backend_log.txt
+npm-debug.log*
+yarn-debug.log*
 
 # Test files (but keep production test scripts)
 test-*.html
@@ -38,7 +58,10 @@ test_*.py
 debug_*.py
 *_output.txt
 
-# Development
-cursor_prompts.md
+# Local / scratch docs (optional project notes)
 deployment.md
 docker_setup.md
+architecture.md
+DEMO_SCRIPT.md
+FREE_DEPLOYMENT_GUIDE.md
+cursor_prompts.md
